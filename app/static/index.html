@@ -18,8 +18,9 @@
 <body>
   <h1>Money App</h1>
   <nav>
-    <a href="/portfolio/balances_html?user_id=1&base_currency=USD">Balances</a>
-    <a href="/transactions/by_date_html?user_id=1&date_str=2025/07/19&category=Eat">Eat 2025/07/19</a>
+    <a id="linkBalances" href="#">Balances</a>
+    <a id="linkEatToday" href="#">Eat Today</a>
+    <a id="linkBuyToday" href="#">Buy Today</a>
   </nav>
 
   <div class="card">
@@ -43,11 +44,48 @@
     <div id="msg" style="margin-top:8px;color:#16a34a"></div>
   </div>
 
+  <div class="card">
+    <h2 style="margin:0 0 12px">View Day</h2>
+    <form id="dayForm">
+      <label>Date</label>
+      <input id="dayDate" type="date" />
+      <label>Category</label>
+      <select id="dayCategory">
+        <option value="">All</option>
+        <option value="Eat">Eat</option>
+        <option value="Buy">Buy</option>
+      </select>
+      <div style="height:12px"></div>
+      <button type="submit">Open List</button>
+    </form>
+  </div>
+
   <script>
     async function fetchJSON(url, opts={}) {
       const res = await fetch(url, opts);
       if (!res.ok) throw new Error(await res.text());
       return res.json();
+    }
+    function ymdSlash(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${y}/${m}/${dd}`;
+    }
+    function ymdDash(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${dd}`;
+    }
+    function updateLinks() {
+      const userId = encodeURIComponent(document.getElementById('userId').value || '1');
+      const today = new Date();
+      const todayStr = ymdSlash(today);
+      document.getElementById('linkBalances').href = `/portfolio/balances_html?user_id=${userId}&base_currency=USD`;
+      document.getElementById('linkEatToday').href = `/transactions/by_date_html?user_id=${userId}&date_str=${todayStr}&category=Eat`;
+      document.getElementById('linkBuyToday').href = `/transactions/by_date_html?user_id=${userId}&date_str=${todayStr}&category=Buy`;
+      document.getElementById('dayDate').value = ymdDash(today);
     }
     async function init() {
       const [accounts, categories, assets] = await Promise.all([
@@ -66,6 +104,8 @@
         opt.value = c.id; opt.textContent = c.name; catSel.appendChild(opt);
       });
       window.usd = assets.find(x => x.symbol === 'USD');
+      updateLinks();
+      document.getElementById('userId').addEventListener('input', updateLinks);
     }
     init();
 
@@ -94,6 +134,16 @@
         document.getElementById('msg').style.color = '#dc2626';
         document.getElementById('msg').textContent = 'Error saving expense';
       }
+    });
+    document.getElementById('dayForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const userId = encodeURIComponent(document.getElementById('userId').value || '1');
+      const d = document.getElementById('dayDate').value; // yyyy-mm-dd
+      const [y,m,dd] = d.split('-');
+      const dateStr = `${y}/${m}/${dd}`;
+      const cat = document.getElementById('dayCategory').value;
+      const url = `/transactions/by_date_html?user_id=${userId}&date_str=${dateStr}${cat?`&category=${encodeURIComponent(cat)}`:''}`;
+      window.location.href = url;
     });
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/app/sw.js');

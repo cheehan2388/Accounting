@@ -233,10 +233,17 @@ def list_expenses_by_date_html(
         table {{ border-collapse: collapse; width: 100%; }}
         th, td {{ border: 1px solid #ddd; padding: 8px; }}
         th {{ background: #fafafa; text-align: left; }}
+        .topbar {{ display:flex; gap:8px; align-items:center; margin-bottom:12px; }}
+        .btn {{ display:inline-block; padding:8px 12px; background:#2563eb; color:#fff; text-decoration:none; border-radius:8px; }}
+        .btn.secondary {{ background:#6b7280; }}
       </style>
     </head>
     <body>
-      <h2>Expenses on {date_str} ({category})</h2>
+      <div class='topbar'>
+        <a class='btn secondary' href='javascript:history.back()'>&larr; Back</a>
+        <a class='btn' href='/app/'>Home</a>
+      </div>
+      <h2 style='margin-top:0'>Expenses on {date_str} ({category})</h2>
       <table>
         <thead>
           <tr><th>Time</th><th>Account</th><th>Amount</th><th>Merchant</th><th>Note</th></tr>
