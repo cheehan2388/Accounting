@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -109,6 +110,10 @@ def balances_by_account(user_id: int, base_currency: str = "USD", session: Sessi
     account_rows = session.execute(select(Account.id, Account.name)).all()
     acct_name = {aid: name for aid, name in account_rows}
 
+    # Map asset_id -> symbol
+    asset_rows = session.execute(select(Asset.id, Asset.symbol)).all()
+    asset_symbol = {int(aid): sym for aid, sym in asset_rows}
+
     # Latest price per asset in requested base currency
     price_rows = session.execute(
         select(Price.asset_id, Price.price)
@@ -149,3 +154,92 @@ def balances_by_account(user_id: int, base_currency: str = "USD", session: Sessi
         )
     return out
 
+
+@router.get("/balances_html", response_class=HTMLResponse)
+def balances_html(user_id: int, base_currency: str = "USD", session: Session = Depends(_get_session)):
+    # Reuse logic from balances_by_account
+    from sqlalchemy import select
+    from ..models import Account, Asset, Price
+
+    by_acct = compute_holdings_by_account(session, user_id)
+    account_rows = session.execute(select(Account.id, Account.name)).all()
+    acct_name = {int(aid): name for aid, name in account_rows}
+    asset_rows = session.execute(select(Asset.id, Asset.symbol)).all()
+    asset_symbol = {int(aid): sym for aid, sym in asset_rows}
+    price_rows = session.execute(
+        select(Price.asset_id, Price.price)
+        .where(Price.base_currency == base_currency)
+        .order_by(Price.asset_id, Price.ts.desc())
+    ).all()
+    latest_price: Dict[int, float] = {}
+    for aid, p in price_rows:
+        if int(aid) not in latest_price:
+            latest_price[int(aid)] = float(p)
+
+    # Build flat rows: (account_name, symbol, qty, price, value)
+    rows = []
+    totals_by_account: Dict[str, float] = {}
+    grand_total = 0.0
+    for account_id, pos in by_acct.items():
+        name = acct_name.get(int(account_id), f"Account {account_id}")
+        acct_total = 0.0
+        for asset_id, qty in pos.items():
+            sym = asset_symbol.get(int(asset_id), str(asset_id))
+            price = latest_price.get(int(asset_id))
+            value = (price * float(qty)) if price is not None else None
+            if value is not None:
+                acct_total += value
+            rows.append((name, sym, float(qty), price, value))
+        totals_by_account[name] = acct_total
+        grand_total += acct_total
+
+    # Render simple HTML
+    def fmt(x):
+        return "-" if x is None else f"{x:,.2f}"
+
+    html_rows = []
+    last_account = None
+    for name, sym, qty, price, value in rows:
+        if last_account is not None and name != last_account:
+            # subtotal row for previous account
+            html_rows.append(
+                f"<tr style='font-weight:600;background:#f6f6f6'><td colspan='4' style='text-align:right'>Subtotal</td><td>${fmt(totals_by_account[last_account])}</td></tr>"
+            )
+        html_rows.append(
+            f"<tr><td>{name}</td><td>{sym}</td><td style='text-align:right'>{fmt(qty)}</td><td style='text-align:right'>{fmt(price)}</td><td style='text-align:right'>{fmt(value)}</td></tr>"
+        )
+        last_account = name
+    if last_account is not None:
+        html_rows.append(
+            f"<tr style='font-weight:600;background:#f6f6f6'><td colspan='4' style='text-align:right'>Subtotal</td><td>${fmt(totals_by_account[last_account])}</td></tr>"
+        )
+
+    html = f"""
+    <html>
+    <head>
+      <meta charset='utf-8' />
+      <title>Balances by Account</title>
+      <style>
+        body {{ font-family: Arial, sans-serif; padding: 24px; }}
+        table {{ border-collapse: collapse; width: 100%; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; }}
+        th {{ background: #fafafa; text-align: left; }}
+      </style>
+    </head>
+    <body>
+      <h2>Balances by Account (base: {base_currency})</h2>
+      <table>
+        <thead>
+          <tr><th>Account</th><th>Asset</th><th>Quantity</th><th>Price ({base_currency})</th><th>Value ({base_currency})</th></tr>
+        </thead>
+        <tbody>
+          {''.join(html_rows) if html_rows else '<tr><td colspan="5">No balances</td></tr>'}
+        </tbody>
+        <tfoot>
+          <tr style='font-weight:700'><td colspan='4' style='text-align:right'>Grand Total</td><td>${fmt(grand_total)}</td></tr>
+        </tfoot>
+      </table>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)

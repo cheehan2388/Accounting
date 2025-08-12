@@ -54,6 +54,12 @@ class AccountOut(BaseModel):
         from_attributes = True
 
 
+class AccountUpdate(BaseModel):
+    name: Optional[str] = None
+    type: Optional[AccountType] = None
+    currency: Optional[str] = None
+
+
 class AssetCreate(BaseModel):
     symbol: str
     name: str

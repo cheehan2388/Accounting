@@ -1,0 +1,10 @@
+{
+  "name": "Money App",
+  "short_name": "Money",
+  "start_url": "/app/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": []
+}
+

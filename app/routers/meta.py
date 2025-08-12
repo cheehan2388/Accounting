@@ -11,6 +11,7 @@ from ..models import Account, AccountType, Asset, AssetType, Category, Price, Us
 from ..schemas import (
     AccountCreate,
     AccountOut,
+    AccountUpdate,
     AssetCreate,
     AssetOut,
     CategoryCreate,
@@ -90,6 +91,12 @@ def set_price(payload: PriceCreate, session: Session = Depends(_get_session)):
 
 @router.post("/accounts", response_model=AccountOut)
 def create_account(payload: AccountCreate, session: Session = Depends(_get_session)):
+    # Idempotent: if an account with the same user_id and name exists, return it
+    existing = session.scalar(
+        select(Account).where(Account.user_id == payload.user_id, Account.name == payload.name)
+    )
+    if existing:
+        return existing
     account = Account(
         user_id=payload.user_id,
         name=payload.name,
@@ -104,4 +111,29 @@ def create_account(payload: AccountCreate, session: Session = Depends(_get_sessi
 @router.get("/accounts", response_model=List[AccountOut])
 def list_accounts(session: Session = Depends(_get_session)):
     return list(session.scalars(select(Account)).all())
+
+
+@router.delete("/accounts/{account_id}")
+def delete_account(account_id: int, session: Session = Depends(_get_session)):
+    account = session.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    session.delete(account)
+    session.flush()
+    return {"ok": True}
+
+
+@router.patch("/accounts/{account_id}", response_model=AccountOut)
+def update_account(account_id: int, payload: AccountUpdate, session: Session = Depends(_get_session)):
+    account = session.get(Account, account_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if payload.name is not None:
+        account.name = payload.name
+    if payload.type is not None:
+        account.type = payload.type
+    if payload.currency is not None:
+        account.currency = payload.currency
+    session.flush()
+    return account
 

@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Money App</title>
+  <link rel="manifest" href="/app/manifest.json">
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 0; padding: 16px; background:#fafafa; }
+    h1 { font-size: 18px; margin: 8px 0 16px; }
+    .card { background:#fff; border-radius:12px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; }
+    label { display:block; font-size:12px; color:#555; margin-bottom:6px; }
+    input, select { width:100%; font-size:16px; padding:10px 12px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box; }
+    button { width:100%; padding:12px; font-size:16px; background:#2563eb; color:#fff; border:0; border-radius:10px; }
+    nav a { display:inline-block; margin-right:12px; color:#2563eb; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <h1>Money App</h1>
+  <nav>
+    <a href="/portfolio/balances_html?user_id=1&base_currency=USD">Balances</a>
+    <a href="/transactions/by_date_html?user_id=1&date_str=2025/07/19&category=Eat">Eat 2025/07/19</a>
+  </nav>
+
+  <div class="card">
+    <h2 style="margin:0 0 12px">Quick Expense</h2>
+    <form id="expenseForm">
+      <label>User ID</label>
+      <input id="userId" value="1" />
+      <label>Amount (USD)</label>
+      <input id="amount" type="number" step="0.01" placeholder="8.00" />
+      <label>Account</label>
+      <select id="account"></select>
+      <label>Category</label>
+      <select id="category"></select>
+      <label>Merchant</label>
+      <input id="merchant" placeholder="Bookstore" />
+      <label>Note</label>
+      <input id="note" placeholder="Book" />
+      <div style="height:12px"></div>
+      <button type="submit">Save Expense</button>
+    </form>
+    <div id="msg" style="margin-top:8px;color:#16a34a"></div>
+  </div>
+
+  <script>
+    async function fetchJSON(url, opts={}) {
+      const res = await fetch(url, opts);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+    async function init() {
+      const [accounts, categories, assets] = await Promise.all([
+        fetchJSON('/meta/accounts'),
+        fetchJSON('/meta/categories'),
+        fetchJSON('/meta/assets')
+      ]);
+      const accountSel = document.getElementById('account');
+      accounts.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a.id; opt.textContent = `${a.name}`; accountSel.appendChild(opt);
+      });
+      const catSel = document.getElementById('category');
+      categories.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id; opt.textContent = c.name; catSel.appendChild(opt);
+      });
+      window.usd = assets.find(x => x.symbol === 'USD');
+    }
+    init();
+
+    document.getElementById('expenseForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const userId = parseInt(document.getElementById('userId').value, 10);
+      const amount = parseFloat(document.getElementById('amount').value);
+      const accountId = parseInt(document.getElementById('account').value, 10);
+      const categoryId = parseInt(document.getElementById('category').value, 10);
+      const merchant = document.getElementById('merchant').value;
+      const note = document.getElementById('note').value;
+      const payload = {
+        user_id: userId,
+        amount,
+        currency_asset_id: window.usd?.id,
+        category_id: categoryId,
+        account_id: accountId,
+        merchant,
+        note
+      };
+      try {
+        const res = await fetchJSON('/transactions/expense', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        document.getElementById('msg').textContent = 'Saved!';
+        document.getElementById('amount').value = '';
+      } catch (err) {
+        document.getElementById('msg').style.color = '#dc2626';
+        document.getElementById('msg').textContent = 'Error saving expense';
+      }
+    });
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/app/sw.js');
+    }
+  </script>
+</body>
+</html>
+

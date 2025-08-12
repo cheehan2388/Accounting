@@ -4,11 +4,12 @@ from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import session_scope
-from ..models import Category, Transaction, TransactionType
+from ..models import Category, Transaction, TransactionType, Asset, Account
 from ..schemas import ExpenseQuickAdd, TradeCreate, TransactionOut, IncomeCreate
 
 
@@ -100,4 +101,155 @@ def today_totals(user_id: int, session: Session = Depends(_get_session)):
         return float(q or 0)
 
     return {"Eat": _sum_for("Eat"), "Buy": _sum_for("Buy")}
+
+
+@router.get("/by_date", response_model=List[TransactionOut])
+def list_expenses_by_date(
+    user_id: int,
+    date_str: str,
+    category: Optional[str] = None,
+    session: Session = Depends(_get_session),
+):
+    """List expense transactions for the given date (YYYY-MM-DD).
+
+    Optional: filter by category name (e.g., "Eat" or "Buy").
+    """
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        # Try alternate common formats
+        try:
+            d = datetime.strptime(date_str, "%Y/%m/%d").date()
+        except ValueError:
+            raise ValueError("Invalid date format. Use YYYY-MM-DD or YYYY/MM/DD.")
+
+    start = datetime(d.year, d.month, d.day)
+    end = datetime(d.year, d.month, d.day, 23, 59, 59)
+
+    cat_id: Optional[int] = None
+    if category:
+        row = session.execute(select(Category.id).where(Category.name == category)).first()
+        if row:
+            cat_id = int(row[0])
+        else:
+            return []
+
+    stmt = select(Transaction).where(
+        Transaction.user_id == user_id,
+        Transaction.type == TransactionType.expense,
+        Transaction.ts >= start,
+        Transaction.ts <= end,
+    )
+    if cat_id is not None:
+        stmt = stmt.where(Transaction.category_id == cat_id)
+
+    stmt = stmt.order_by(Transaction.ts.asc())
+    results = list(session.scalars(stmt).all())
+    return results
+
+
+@router.get("/by_date_html", response_class=HTMLResponse)
+def list_expenses_by_date_html(
+    user_id: int,
+    date_str: str,
+    category: str = "Eat",
+    session: Session = Depends(_get_session),
+):
+    # Parse date (YYYY-MM-DD or YYYY/MM/DD)
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        d = datetime.strptime(date_str, "%Y/%m/%d").date()
+
+    start = datetime(d.year, d.month, d.day)
+    end = datetime(d.year, d.month, d.day, 23, 59, 59)
+
+    # Resolve category id (optional)
+    cat_id = None
+    if category:
+        row = session.execute(select(Category.id).where(Category.name == category)).first()
+        if row:
+            cat_id = int(row[0])
+        else:
+            # Unknown category → empty list
+            cat_id = -1
+
+    stmt = select(Transaction).where(
+        Transaction.user_id == user_id,
+        Transaction.type == TransactionType.expense,
+        Transaction.ts >= start,
+        Transaction.ts <= end,
+    )
+    if cat_id and cat_id > 0:
+        stmt = stmt.where(Transaction.category_id == cat_id)
+    stmt = stmt.order_by(Transaction.ts.asc())
+    txns: list[Transaction] = list(session.scalars(stmt).all())
+
+    if not txns:
+        html_empty = f"""
+        <html><head><meta charset='utf-8'><title>Expenses {date_str}</title></head>
+        <body style='font-family:Arial,sans-serif;padding:24px'>
+          <h2>Expenses on {date_str} ({category})</h2>
+          <p>No items.</p>
+        </body></html>
+        """
+        return HTMLResponse(content=html_empty)
+
+    # Collect asset/account names for display
+    asset_ids = set([t.from_asset_id for t in txns if t.from_asset_id])
+    assets = {a.id: a for a in session.scalars(select(Asset).where(Asset.id.in_(asset_ids))).all()}
+    account_ids = set([t.account_id for t in txns if t.account_id])
+    accounts = {a.id: a for a in session.scalars(select(Account).where(Account.id.in_(account_ids))).all()}
+
+    # Build rows and total
+    total = 0.0
+    rows = []
+    for t in txns:
+        time_str = t.ts.strftime("%H:%M") if t.ts else ""
+        cur = assets.get(t.from_asset_id)
+        sym = cur.symbol if cur else ""
+        amt = float(t.from_amount or 0)
+        total += amt
+        acct = accounts.get(t.account_id)
+        acct_name = acct.name if acct else ""
+        rows.append((time_str, acct_name, sym, amt, t.merchant or "", t.note or ""))
+
+    # Render HTML table
+    def fmt_money(x: float) -> str:
+        return f"{x:,.2f}"
+
+    trs = [
+        f"<tr><td>{time}</td><td>{acct}</td><td style='text-align:right'>{fmt_money(amt)} {sym}</td><td>{merchant}</td><td>{note}</td></tr>"
+        for (time, acct, sym, amt, merchant, note) in rows
+    ]
+
+    html = f"""
+    <html>
+    <head>
+      <meta charset='utf-8' />
+      <title>Expenses on {date_str} ({category})</title>
+      <style>
+        body {{ font-family: Arial, sans-serif; padding: 24px; }}
+        table {{ border-collapse: collapse; width: 100%; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; }}
+        th {{ background: #fafafa; text-align: left; }}
+      </style>
+    </head>
+    <body>
+      <h2>Expenses on {date_str} ({category})</h2>
+      <table>
+        <thead>
+          <tr><th>Time</th><th>Account</th><th>Amount</th><th>Merchant</th><th>Note</th></tr>
+        </thead>
+        <tbody>
+          {''.join(trs)}
+        </tbody>
+        <tfoot>
+          <tr style='font-weight:700'><td colspan='2' style='text-align:right'>Total</td><td style='text-align:right'>{fmt_money(total)}</td><td colspan='2'></td></tr>
+        </tfoot>
+      </table>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
