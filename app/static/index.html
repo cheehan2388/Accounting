@@ -24,6 +24,8 @@
     <a id="linkBillToday" href="#">Bill Today</a>
     <a id="linkIncome" href="#">Income</a>
     <a id="linkExpenseTrend" href="#">Expense Trend</a>
+    <a id="linkIncomeTrend" href="#">Income Trend</a>
+    <a id="linkIOTrend" href="#">Income vs Outcome</a>
   </nav>
 
   <div class="card">
@@ -63,6 +65,9 @@
         <button type="button" id="btnSalary" style="flex:1; background:#2563eb; border:0; border-radius:8px; color:#fff; padding:8px">Salary</button>
         <button type="button" id="btnStartup" style="flex:1; background:#f59e0b; border:0; border-radius:8px; color:#000; padding:8px">Startup</button>
         <button type="button" id="btnInvestment" style="flex:1; background:#10b981; border:0; border-radius:8px; color:#fff; padding:8px">Investment</button>
+      </div>
+      <div id="incomeSelWrap" style="font-size:12px;color:#111;margin:-4px 0 8px">
+        Selected category: <span id="incomeSel" style="font-weight:600">-</span>
       </div>
       <label>Amount</label>
       <input id="incomeAmount" type="number" step="0.01" placeholder="1500.00" />
@@ -122,6 +127,8 @@
       document.getElementById('linkBillToday').href = `/transactions/by_date_html?user_id=${userId}&date_str=${todayStr}&category=Bill&base_currency=${base}`;
       document.getElementById('linkIncome').href = `/transactions/income_summary_html?user_id=${userId}&months=6`;
       document.getElementById('linkExpenseTrend').href = `/transactions/expense_trend_html?user_id=${userId}&categories=Buy,Bill,Eat&base_currency=${base}`;
+      document.getElementById('linkIncomeTrend').href = `/transactions/income_trend_html?user_id=${userId}&categories=Salary,Investment,Startup&base_currency=${base}`;
+      document.getElementById('linkIOTrend').href = `/transactions/io_trend_html?user_id=${userId}&income_categories=Salary,Investment,Startup&expense_categories=Buy,Bill,Eat&base_currency=${base}`;
       document.getElementById('dayDate').value = ymdDash(today);
     }
     async function init() {
@@ -182,32 +189,46 @@
       updateLinks();
       document.getElementById('userId').addEventListener('input', updateLinks);
       baseSel.addEventListener('change', ()=>{ updateLinks(); persistSelections(); });
+      function updateIncomeSelectedLabel(){
+        const sel = catSel.options[catSel.selectedIndex];
+        document.getElementById('incomeSel').textContent = sel ? sel.textContent : '-';
+      }
+      catSel.addEventListener('change', ()=>{ updateIncomeSelectedLabel(); persistSelections(); });
       document.getElementById('btnEat').addEventListener('click', ()=>{
         const eat = categories.find(c=>c.name==='Eat'); if (eat) catSel.value = String(eat.id);
+        updateIncomeSelectedLabel();
       });
       document.getElementById('btnBuy').addEventListener('click', ()=>{
         const buy = categories.find(c=>c.name==='Buy'); if (buy) catSel.value = String(buy.id);
+        updateIncomeSelectedLabel();
       });
       document.getElementById('btnBill').addEventListener('click', ()=>{
         const opt = Array.from(catSel.options).find(o=>o.textContent==='Bill');
         if (opt) catSel.value = opt.value;
+        updateIncomeSelectedLabel();
       });
       document.getElementById('btnInvExpense').addEventListener('click', ()=>{
         const inv = Array.from(catSel.options).find(o=>o.textContent==='Investment');
         if (inv) catSel.value = inv.value;
+        updateIncomeSelectedLabel();
       });
       document.getElementById('btnSalary').addEventListener('click', ()=>{
         const opt = Array.from(catSel.options).find(o=>o.textContent==='Salary');
         if (opt) catSel.value = opt.value;
+        updateIncomeSelectedLabel();
       });
       document.getElementById('btnStartup').addEventListener('click', ()=>{
         const opt = Array.from(catSel.options).find(o=>o.textContent==='Startup');
         if (opt) catSel.value = opt.value;
+        updateIncomeSelectedLabel();
       });
       document.getElementById('btnInvestment').addEventListener('click', ()=>{
         const opt = Array.from(catSel.options).find(o=>o.textContent==='Investment');
         if (opt) catSel.value = opt.value;
+        updateIncomeSelectedLabel();
       });
+      // Initialize label
+      updateIncomeSelectedLabel();
     }
     init();
 
@@ -266,7 +287,8 @@
       const account_id = parseInt(document.getElementById('account').value, 10);
       const to_asset_id = parseInt(document.getElementById('currency').value, 10);
       const note = document.getElementById('incomeNote').value;
-      const payload = { user_id: userId, account_id, to_asset_id, to_amount, note };
+      const category_id = parseInt(document.getElementById('category').value, 10);
+      const payload = { user_id: userId, account_id, to_asset_id, to_amount, note, category_id };
       try {
         await fetchJSON('/transactions/income', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         document.getElementById('incomeMsg').style.color = '#16a34a';
