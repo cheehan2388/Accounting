@@ -1,4 +1,4 @@
-.db
-.csv
-.venv
-.pyc
+*.db
+*.csv
+*.venv
+*.pyc

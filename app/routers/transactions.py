@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends
@@ -123,8 +124,12 @@ def list_expenses_by_date(
         except ValueError:
             raise ValueError("Invalid date format. Use YYYY-MM-DD or YYYY/MM/DD.")
 
-    start = datetime(d.year, d.month, d.day)
-    end = datetime(d.year, d.month, d.day, 23, 59, 59)
+    # Interpret the requested day in Taiwan time, then convert to UTC range
+    tz = ZoneInfo("Asia/Taipei")
+    start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=tz)
+    end_local = start_local + timedelta(days=1) - timedelta(microseconds=1)
+    start = start_local.astimezone(timezone.utc).replace(tzinfo=None)
+    end = end_local.astimezone(timezone.utc).replace(tzinfo=None)
 
     cat_id: Optional[int] = None
     if category:
@@ -161,8 +166,11 @@ def list_expenses_by_date_html(
     except ValueError:
         d = datetime.strptime(date_str, "%Y/%m/%d").date()
 
-    start = datetime(d.year, d.month, d.day)
-    end = datetime(d.year, d.month, d.day, 23, 59, 59)
+    tz = ZoneInfo("Asia/Taipei")
+    start_local = datetime(d.year, d.month, d.day, 0, 0, 0, tzinfo=tz)
+    end_local = start_local + timedelta(days=1) - timedelta(microseconds=1)
+    start = start_local.astimezone(timezone.utc).replace(tzinfo=None)
+    end = end_local.astimezone(timezone.utc).replace(tzinfo=None)
 
     # Resolve category id (optional)
     cat_id = None
@@ -205,7 +213,12 @@ def list_expenses_by_date_html(
     total = 0.0
     rows = []
     for t in txns:
-        time_str = t.ts.strftime("%H:%M") if t.ts else ""
+        # Convert stored UTC (naive) to Taiwan time for display
+        if t.ts:
+            dt_local = t.ts.replace(tzinfo=timezone.utc).astimezone(tz)
+            time_str = dt_local.strftime("%H:%M")
+        else:
+            time_str = ""
         cur = assets.get(t.from_asset_id)
         sym = cur.symbol if cur else ""
         amt = float(t.from_amount or 0)
