@@ -21,6 +21,9 @@
     <a id="linkBalances" href="#">Balances</a>
     <a id="linkEatToday" href="#">Eat Today</a>
     <a id="linkBuyToday" href="#">Buy Today</a>
+    <a id="linkBillToday" href="#">Bill Today</a>
+    <a id="linkIncome" href="#">Income</a>
+    <a id="linkExpenseTrend" href="#">Expense Trend</a>
   </nav>
 
   <div class="card">
@@ -36,9 +39,11 @@
       <select id="account"></select>
       <label>Category</label>
       <select id="category"></select>
-      <div style="display:flex; gap:8px; margin:8px 0 4px">
+      <div style="display:flex; gap:8px; margin:8px 0 4px; flex-wrap:wrap">
         <button type="button" id="btnEat" style="flex:1; background:#10b981; border:0; border-radius:8px; color:#fff; padding:8px">Eat</button>
         <button type="button" id="btnBuy" style="flex:1; background:#f59e0b; border:0; border-radius:8px; color:#000; padding:8px">Buy</button>
+        <button type="button" id="btnBill" style="flex:1; background:#64748b; border:0; border-radius:8px; color:#fff; padding:8px">Bill</button>
+        <button type="button" id="btnInvExpense" style="flex:1; background:#8b5cf6; border:0; border-radius:8px; color:#fff; padding:8px">Investment</button>
       </div>
       <label>Merchant</label>
       <input id="merchant" placeholder="Bookstore" />
@@ -51,15 +56,37 @@
   </div>
 
   <div class="card">
+    <h2 style="margin:0 0 12px">Quick Income</h2>
+    <form id="incomeForm">
+      <div style="font-size:12px;color:#555;margin-bottom:8px">Uses the Account, Currency, and Category chosen above.</div>
+      <div style="display:flex; gap:8px; margin:0 0 8px; flex-wrap:wrap">
+        <button type="button" id="btnSalary" style="flex:1; background:#2563eb; border:0; border-radius:8px; color:#fff; padding:8px">Salary</button>
+        <button type="button" id="btnStartup" style="flex:1; background:#f59e0b; border:0; border-radius:8px; color:#000; padding:8px">Startup</button>
+        <button type="button" id="btnInvestment" style="flex:1; background:#10b981; border:0; border-radius:8px; color:#fff; padding:8px">Investment</button>
+      </div>
+      <label>Amount</label>
+      <input id="incomeAmount" type="number" step="0.01" placeholder="1500.00" />
+      <label>Note</label>
+      <input id="incomeNote" placeholder="Salary" />
+      <div style="height:12px"></div>
+      <button type="submit" style="background:#059669">Save Income</button>
+    </form>
+    <div id="incomeMsg" style="margin-top:8px;color:#16a34a"></div>
+  </div>
+
+  <div class="card">
     <h2 style="margin:0 0 12px">View Day</h2>
     <form id="dayForm">
       <label>Date</label>
       <input id="dayDate" type="date" />
+      <label>Base Currency</label>
+      <select id="baseCurrency"></select>
       <label>Category</label>
       <select id="dayCategory">
         <option value="">All</option>
         <option value="Eat">Eat</option>
         <option value="Buy">Buy</option>
+        <option value="Bill">Bill</option>
       </select>
       <div style="height:12px"></div>
       <button type="submit">Open List</button>
@@ -88,9 +115,13 @@
       const userId = encodeURIComponent(document.getElementById('userId').value || '1');
       const today = new Date();
       const todayStr = ymdSlash(today);
-      document.getElementById('linkBalances').href = `/portfolio/balances_html?user_id=${userId}&base_currency=USD`;
-      document.getElementById('linkEatToday').href = `/transactions/by_date_html?user_id=${userId}&date_str=${todayStr}&category=Eat`;
-      document.getElementById('linkBuyToday').href = `/transactions/by_date_html?user_id=${userId}&date_str=${todayStr}&category=Buy`;
+      const base = encodeURIComponent(document.getElementById('baseCurrency').value || 'USD');
+      document.getElementById('linkBalances').href = `/portfolio/balances_html?user_id=${userId}&base_currency=${base}`;
+      document.getElementById('linkEatToday').href = `/transactions/by_date_html?user_id=${userId}&date_str=${todayStr}&category=Eat&base_currency=${base}`;
+      document.getElementById('linkBuyToday').href = `/transactions/by_date_html?user_id=${userId}&date_str=${todayStr}&category=Buy&base_currency=${base}`;
+      document.getElementById('linkBillToday').href = `/transactions/by_date_html?user_id=${userId}&date_str=${todayStr}&category=Bill&base_currency=${base}`;
+      document.getElementById('linkIncome').href = `/transactions/income_summary_html?user_id=${userId}&months=6`;
+      document.getElementById('linkExpenseTrend').href = `/transactions/expense_trend_html?user_id=${userId}&categories=Buy,Bill,Eat&base_currency=${base}`;
       document.getElementById('dayDate').value = ymdDash(today);
     }
     async function init() {
@@ -109,6 +140,19 @@
         const opt = document.createElement('option');
         opt.value = c.id; opt.textContent = c.name; catSel.appendChild(opt);
       });
+      // Ensure income categories exist, and create Bill (idempotent), then refresh categories list
+      try {
+        await fetch('/meta/categories/seed_income_categories', { method: 'POST' });
+        await fetch('/meta/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Bill' }) });
+        const cats2 = await fetchJSON('/meta/categories');
+        const existing = new Set(Array.from(catSel.options).map(o=>o.value));
+        cats2.forEach(c => {
+          if (!existing.has(String(c.id))) {
+            const opt = document.createElement('option');
+            opt.value = c.id; opt.textContent = c.name; catSel.appendChild(opt);
+          }
+        });
+      } catch {}
       // Currency list: prefer fiat assets (e.g., USD, TWD, MYR)
       const currencySel = document.getElementById('currency');
       const fiats = assets.filter(x => x.type === 'fiat');
@@ -121,24 +165,60 @@
         const opt = document.createElement('option');
         opt.value = a.id; opt.textContent = a.symbol; currencySel.appendChild(opt);
       });
+      // Base currency selector uses symbols
+      const baseSel = document.getElementById('baseCurrency');
+      preferred.concat(ordered.map(a=>a.symbol)).filter((v,i,arr)=>arr.indexOf(v)===i).forEach(sym => {
+        const opt = document.createElement('option');
+        opt.value = sym; opt.textContent = sym; baseSel.appendChild(opt);
+      });
       // Restore last selections
       const saved = JSON.parse(localStorage.getItem('moneyapp.form') || '{}');
       if (saved.userId) document.getElementById('userId').value = saved.userId;
       if (saved.accountId) accountSel.value = String(saved.accountId);
       if (saved.categoryId) catSel.value = String(saved.categoryId);
       if (saved.currencyId) currencySel.value = String(saved.currencyId);
+      if (saved.baseCurrency) baseSel.value = saved.baseCurrency;
       window.assetsMap = Object.fromEntries(assets.map(a=>[a.id,a]));
       updateLinks();
       document.getElementById('userId').addEventListener('input', updateLinks);
+      baseSel.addEventListener('change', ()=>{ updateLinks(); persistSelections(); });
       document.getElementById('btnEat').addEventListener('click', ()=>{
         const eat = categories.find(c=>c.name==='Eat'); if (eat) catSel.value = String(eat.id);
       });
       document.getElementById('btnBuy').addEventListener('click', ()=>{
         const buy = categories.find(c=>c.name==='Buy'); if (buy) catSel.value = String(buy.id);
       });
+      document.getElementById('btnBill').addEventListener('click', ()=>{
+        const opt = Array.from(catSel.options).find(o=>o.textContent==='Bill');
+        if (opt) catSel.value = opt.value;
+      });
+      document.getElementById('btnInvExpense').addEventListener('click', ()=>{
+        const inv = Array.from(catSel.options).find(o=>o.textContent==='Investment');
+        if (inv) catSel.value = inv.value;
+      });
+      document.getElementById('btnSalary').addEventListener('click', ()=>{
+        const opt = Array.from(catSel.options).find(o=>o.textContent==='Salary');
+        if (opt) catSel.value = opt.value;
+      });
+      document.getElementById('btnStartup').addEventListener('click', ()=>{
+        const opt = Array.from(catSel.options).find(o=>o.textContent==='Startup');
+        if (opt) catSel.value = opt.value;
+      });
+      document.getElementById('btnInvestment').addEventListener('click', ()=>{
+        const opt = Array.from(catSel.options).find(o=>o.textContent==='Investment');
+        if (opt) catSel.value = opt.value;
+      });
     }
     init();
 
+    function persistSelections(){
+      const userId = parseInt(document.getElementById('userId').value, 10) || 1;
+      const accountId = parseInt(document.getElementById('account').value, 10);
+      const categoryId = parseInt(document.getElementById('category').value, 10);
+      const currencyId = parseInt(document.getElementById('currency').value, 10);
+      const baseCurrency = document.getElementById('baseCurrency').value || 'USD';
+      localStorage.setItem('moneyapp.form', JSON.stringify({ userId, accountId, categoryId, currencyId, baseCurrency }));
+    }
     document.getElementById('expenseForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const userId = parseInt(document.getElementById('userId').value, 10);
@@ -161,9 +241,7 @@
         document.getElementById('msg').textContent = 'Saved!';
         document.getElementById('amount').value = '';
         // Remember selections
-        localStorage.setItem('moneyapp.form', JSON.stringify({
-          userId, accountId, categoryId, currencyId: payload.currency_asset_id
-        }));
+        persistSelections();
       } catch (err) {
         document.getElementById('msg').style.color = '#dc2626';
         document.getElementById('msg').textContent = 'Error saving expense';
@@ -176,8 +254,29 @@
       const [y,m,dd] = d.split('-');
       const dateStr = `${y}/${m}/${dd}`;
       const cat = document.getElementById('dayCategory').value;
-      const url = `/transactions/by_date_html?user_id=${userId}&date_str=${dateStr}${cat?`&category=${encodeURIComponent(cat)}`:''}`;
+      const base = encodeURIComponent(document.getElementById('baseCurrency').value || 'USD');
+      const url = `/transactions/by_date_html?user_id=${userId}&date_str=${dateStr}${cat?`&category=${encodeURIComponent(cat)}`:''}&base_currency=${base}`;
       window.location.href = url;
+    });
+
+    document.getElementById('incomeForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const userId = parseInt(document.getElementById('userId').value, 10);
+      const to_amount = parseFloat(document.getElementById('incomeAmount').value);
+      const account_id = parseInt(document.getElementById('account').value, 10);
+      const to_asset_id = parseInt(document.getElementById('currency').value, 10);
+      const note = document.getElementById('incomeNote').value;
+      const payload = { user_id: userId, account_id, to_asset_id, to_amount, note };
+      try {
+        await fetchJSON('/transactions/income', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        document.getElementById('incomeMsg').style.color = '#16a34a';
+        document.getElementById('incomeMsg').textContent = 'Income saved!';
+        document.getElementById('incomeAmount').value = '';
+        persistSelections();
+      } catch (err) {
+        document.getElementById('incomeMsg').style.color = '#dc2626';
+        document.getElementById('incomeMsg').textContent = 'Error saving income';
+      }
     });
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/app/sw.js');

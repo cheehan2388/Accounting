@@ -143,6 +143,7 @@ class IncomeCreate(BaseModel):
     to_asset_id: int
     to_amount: float
     account_id: int
+    category_id: Optional[int] = None
     ts: Optional[datetime] = None
     note: Optional[str] = None
 

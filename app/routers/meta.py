@@ -137,3 +137,20 @@ def update_account(account_id: int, payload: AccountUpdate, session: Session = D
     session.flush()
     return account
 
+
+@router.post("/categories/seed_income_categories", response_model=List[CategoryOut])
+def seed_income_categories(session: Session = Depends(_get_session)):
+    """Ensure common income categories exist: Salary, Startup, Investment."""
+    wanted = ["Salary", "Startup", "Investment"]
+    existing = {c.name for c in session.scalars(select(Category).where(Category.name.in_(wanted))).all()}
+    created: List[Category] = []
+    for name in wanted:
+        if name not in existing:
+            cat = Category(name=name)
+            session.add(cat)
+            created.append(cat)
+    session.flush()
+    # Return all income categories (created or pre-existing) for convenience
+    cats = list(session.scalars(select(Category).where(Category.name.in_(wanted))).all())
+    return cats
+
