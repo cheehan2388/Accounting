@@ -380,7 +380,6 @@ def expense_trend_html(
             f'{{label:"{name}",data:{vals_js},borderColor:"{color}",backgroundColor:"{color}33",tension:0.2,fill:false}}'
         )
     datasets_js = '[' + ','.join(datasets_js_parts) + ']'
-    ma_datasets_js = '[' + ','.join(ma_datasets_js_parts) + ']'
     labels_js = '[' + ','.join([f'"{d}"' for d in labels]) + ']'
 
     html = f"""
@@ -532,6 +531,7 @@ def income_trend_html(
             f'{{label:"{name} (MA3)",data:{ma_js},borderColor:"{color}",borderDash:[6,4],backgroundColor:"transparent",tension:0.2,fill:false}}'
         )
     datasets_js = '[' + ','.join(datasets_js_parts) + ']'
+    ma_datasets_js = '[' + ','.join(ma_datasets_js_parts) + ']'
     labels_js = '[' + ','.join([f'"{d}"' for d in labels]) + ']'
 
     # Build stats table HTML

@@ -140,8 +140,8 @@ def update_account(account_id: int, payload: AccountUpdate, session: Session = D
 
 @router.post("/categories/seed_income_categories", response_model=List[CategoryOut])
 def seed_income_categories(session: Session = Depends(_get_session)):
-    """Ensure common income categories exist: Salary, Startup, Investment."""
-    wanted = ["Salary", "Startup", "Investment"]
+    """Ensure common income categories exist: Salary, Startup, Investment, Texas Poker."""
+    wanted = ["Salary", "Startup", "Investment", "Texas Poker"]
     existing = {c.name for c in session.scalars(select(Category).where(Category.name.in_(wanted))).all()}
     created: List[Category] = []
     for name in wanted:

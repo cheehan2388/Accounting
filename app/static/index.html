@@ -65,6 +65,7 @@
         <button type="button" id="btnSalary" style="flex:1; background:#2563eb; border:0; border-radius:8px; color:#fff; padding:8px">Salary</button>
         <button type="button" id="btnStartup" style="flex:1; background:#f59e0b; border:0; border-radius:8px; color:#000; padding:8px">Startup</button>
         <button type="button" id="btnInvestment" style="flex:1; background:#10b981; border:0; border-radius:8px; color:#fff; padding:8px">Investment</button>
+        <button type="button" id="btnTexasPoker" style="flex:1; background:#ef4444; border:0; border-radius:8px; color:#fff; padding:8px">Texas Poker</button>
       </div>
       <div id="incomeSelWrap" style="font-size:12px;color:#111;margin:-4px 0 8px">
         Selected category: <span id="incomeSel" style="font-weight:600">-</span>
@@ -127,7 +128,7 @@
       document.getElementById('linkBillToday').href = `/transactions/by_date_html?user_id=${userId}&date_str=${todayStr}&category=Bill&base_currency=${base}`;
       document.getElementById('linkIncome').href = `/transactions/income_summary_html?user_id=${userId}&months=6`;
       document.getElementById('linkExpenseTrend').href = `/transactions/expense_trend_html?user_id=${userId}&categories=Buy,Bill,Eat&base_currency=${base}`;
-      document.getElementById('linkIncomeTrend').href = `/transactions/income_trend_html?user_id=${userId}&categories=Salary,Investment,Startup&base_currency=${base}`;
+      document.getElementById('linkIncomeTrend').href = `/transactions/income_trend_html?user_id=${userId}&categories=Salary,Investment,Startup,Texas%20Poker&base_currency=${base}`;
       document.getElementById('linkIOTrend').href = `/transactions/io_trend_html?user_id=${userId}&income_categories=Salary,Investment,Startup&expense_categories=Buy,Bill,Eat&base_currency=${base}`;
       document.getElementById('dayDate').value = ymdDash(today);
     }
@@ -224,6 +225,11 @@
       });
       document.getElementById('btnInvestment').addEventListener('click', ()=>{
         const opt = Array.from(catSel.options).find(o=>o.textContent==='Investment');
+        if (opt) catSel.value = opt.value;
+        updateIncomeSelectedLabel();
+      });
+      document.getElementById('btnTexasPoker').addEventListener('click', ()=>{
+        const opt = Array.from(catSel.options).find(o=>o.textContent==='Texas Poker');
         if (opt) catSel.value = opt.value;
         updateIncomeSelectedLabel();
       });
